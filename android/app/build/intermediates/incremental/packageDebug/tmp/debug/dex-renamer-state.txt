@@ -1,0 +1,4 @@
+#Mon Oct 21 13:21:31 EEST 2019
+base.0=/home/alex/mobile-apps/water/android/app/build/intermediates/transforms/dexMerger/debug/0
+path.0=classes.dex
+renamed.0=classes.dex
