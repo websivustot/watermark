@@ -9,33 +9,32 @@
 import React from 'react';
 import {
   View,
-    Text,
-    TouchableHighlight,
-    Modal,
-    StyleSheet,
-    Button,
-    Image,
-    Dimensions,
-    ScrollView,
-    PermissionsAndroid,
-    Platform,
-    Alert
+  Text,
+  TouchableHighlight,
+  Modal,
+  StyleSheet,
+  Button,
+  Image,
+  Dimensions,
+  ScrollView,
+  PermissionsAndroid,
+  Platform,
+  Alert,
+  PanResponder,
+  Animated
 } from 'react-native';
 
 import CameraRoll from "@react-native-community/cameraroll";
 
 import Share from 'react-native-share';
 import RNFetchBlob from 'react-native-fetch-blob';
-import Jimp from 'jimp';
 import RNFS from 'react-native-fs';
-import Marker from "react-native-image-marker"
-
+import Marker from 'react-native-image-marker';
+import LogoTitle from './components/LogoTitle';
+import P10 from './p10.png';
 
 let styles
-const { width } = Dimensions.get('window');
-
-const img = require('./p10.png');
-const imgProps = Image.resolveAssetSource(img);
+const { width, height } = Dimensions.get('window');
 
 export async function request_location_runtime_permission() {
 
@@ -60,12 +59,17 @@ export async function request_location_runtime_permission() {
 
 class App extends React.Component {
 
+      constructor() {
+          super();
+      }
+
       async componentDidMount() {
           await request_location_runtime_permission()
         }
 
-    static navigationOptions = {
-        title: 'Watermark Logo App'
+      static navigationOptions = {
+        // headerTitle instead of title
+            headerTitle: () => <LogoTitle />,
       }
 
       state = {
@@ -75,8 +79,42 @@ class App extends React.Component {
         photo: null,
         logo: null,
         image: null,
-        saveButtonDisabled: true
+        saveButtonDisabled: true,
+        width: width,
+        height: height,
+        logoTop: 0,
+        logoLeft: 0,
+        rate: 1,
+        pan: new Animated.ValueXY()
       }
+
+      UNSAFE_componentWillMount() {
+          // Add a listener for the delta value change
+          this._val = { x:0, y:0 }
+          this.state.pan.addListener((value) => this._val = value);
+          // Initialize PanResponder with move handling
+          this.panResponder = PanResponder.create({
+            onStartShouldSetPanResponder: (e, gesture) => true,
+            onPanResponderMove: (e, gesture) => {
+                //console.log("gesture: ", this.state.pan.x, this.state.pan.y);
+
+                Animated.event([
+                          null, { dx: this.state.pan.x, dy: this.state.pan.y }
+                        ])(e, gesture)
+            },
+            onPanResponderStart: (e, gesture) => {console.log("start",this.state.pan.y, this.state.pan.x)},
+            onPanResponderEnd: (e, gesture) => {console.log("end")},
+            onPanResponderRelease: (e, gesture) => {console.log("release",this.state.pan.y, this.state.pan.x)
+            this.setState({ logoTop: this.state.pan.y._value + this.state.logoTop, logoLeft: this.state.pan.x._value + this.state.logoLeft })
+            this.state.pan.setValue({ x:0, y:0})
+            },
+            onPanResponderTerminate: (e, gesture) => {console.log("terminate")}
+          });
+          // adjusting delta value
+          this.state.pan.setValue({ x:0, y:0})
+        }
+
+
 
       setIndex = (index) => {
         if (index === this.state.index) {
@@ -103,10 +141,6 @@ class App extends React.Component {
          logo: this.state.logo,
          photo: this.state.photo,
         })
-
-
-
-
       }
 
       share = () => {
@@ -124,8 +158,7 @@ class App extends React.Component {
           Share.open(shareOptions)
             .then((res) => console.log('res:', res))
             .catch(err => console.log('err', err))
-        }
-        )
+        })
       }
 
       editImage = (photo) => {
@@ -133,39 +166,73 @@ class App extends React.Component {
         this.setState({
           [this.state.image == "photo" ? 'photo' : 'logo']: photo
         });
+
         console.log("enable",this.state.photo,this.state.logo);
         if ((this.state.photo && this.state.image == "logo") || (this.state.logo && this.state.image == "photo")) {
 
-            this.setState({ saveButtonDisabled: false });
+            this.setState({ saveButtonDisabled: false
+                            });
+
         }
+
+        if (this.state.photo && this.state.logo) {
+
+                    const rate = this.state.photo.width / this.state.logo.width
+                    this.setState({
+                                    logoTop: this.state.photo.height / 10,
+                                    logoLeft: this.state.photo.width / 10,
+                                    rate: rate
+                                  });
+
+            }
       }
 
       onComplete = (data) => {
         console.log('data:', data);
       };
 
+
+
   render() {
     console.log('state :', this.state);
+    const tempImg = Image.resolveAssetSource(P10);
+    console.log("tempimage", tempImg);
     var photo = this.state.photo
       ? this.state.photo
-      : 'file///storage/emulated/0/Download/the-lucky-neko-M8uSC8OPXco-unsplash.jpg'
+      : {"filename": "p10.png", "height": 10, "uri": tempImg.uri, "width": 10}
     var logo = this.state.logo
           ? this.state.logo
-          : 'file///storage/emulated/0/Download/the-lucky-neko-M8uSC8OPXco-unsplash.jpg'
+          : {"filename": "p10.png", "height": 10, "uri": tempImg.uri, "width": 10}
     console.log('photo: ', photo, 'logo: ', logo);
-    return (
-      <View style={styles.container}>
+    const panStyle = {
+          transform: this.state.pan.getTranslateTransform()
+     }
 
-        <Image source={{ uri: photo }}
+    return (
+
+        <ScrollView contentContainerStyle={styles.scrollView1}>
+        <View style={styles.container}>
+        <Image source={{ uri: photo.uri }}
             style={{
                 width: width,
-                height:400,
+                height:this.state.photo ? this.state.photo.height / (this.state.photo.width / width) : width,
                 resizeMode: 'contain'
               }}
         />
-        <Image source={{ uri: logo }}
-                    style={styles.logo}
+        <Animated.Image source={{ uri: logo.uri }}
+
+                 {...this.panResponder.panHandlers}
+               style={[panStyle, {
+                                    position: 'absolute',
+                                    width: this.state.width / 3,
+                                    height:100,
+                                    resizeMode: 'contain',
+                                    opacity: 1,
+                                    top: this.state.logoTop,
+                                    left: this.state.logoLeft
+                                    }]}
                 />
+
         <View style={styles.buttonContainer}>
         <Button
           title='Open Photo'
@@ -184,7 +251,6 @@ class App extends React.Component {
                 {
                     this.toggleModal();
                     this.getPhotos("logo");
-
                  }
                 }
             />
@@ -193,39 +259,31 @@ class App extends React.Component {
                       style={{ disabled: true }}
                       disabled={this.state.saveButtonDisabled ? true : false}
                       onPress={() => {
-                        //const logo = this.state.logo;
-                        //console.log("imgProps: ", imgProps);
-                         const logo = this.state.photos[this.state.index].node.image;
-                        const logoProps = Image.resolveAssetSource(logo);
-                        console.log("logo: ", logo, "logoPropsplus: ", logoProps);
-
-                        //CameraRoll.saveToCameraRoll(logo.uri);
+                        const logo = this.state.logo;
+                        const photo = this.state.photo;
+                        const rate = photo.width / logo.width;
+                        console.log("photo.width / logo.width,rate: ", rate, photo.width, logo.width);
 
                         this.setState({
                             loading: true
                          })
-                         Marker.markText({
-                            src: logoProps.uri,
-                            text: 'text marker',
-                            X: 30,
-                            Y: 30,
-                            color: '#FF0000',
-                            fontName: 'Arial-BoldItalicMT',
-                            fontSize: 44,
-                            shadowStyle: {
-                                dx: 10.5,
-                                dy: 20.8,
-                                radius: 20.9,
-                                color: '#ff00ff'
-                            },
-                            textBackgroundStyle: {
-                                type: 'stretchX',
-                                paddingX: 10,
-                                paddingY: 10,
-                                color: '#0f0'
-                            },
-                            scale: 1,
-                            quality: 100
+
+                         const markerX = this.state.photo.width / this.state.width * this.state.logoLeft;
+                         const markerY = this.state.photo.width / this.state.width * this.state.logoTop;
+                         const markerScale = rate * 0.3;
+                         console.log("markerX,markerY,markerScale",markerX,markerY,markerScale)
+
+
+                         Marker.markImage({
+                            src: photo.uri,
+                            markerSrc: logo.uri, // icon uri
+                            X: markerX, // left
+                            Y: markerY, // top
+                            scale: 1, // scale of bg
+                            markerScale: markerScale, // scale of icon
+                            quality: 100, // quality of image
+                            saveFormat: 'jpg',
+                            maxSize: 10000,
                          }).then((res) => {
                              this.setState({
                                 loading: false,
@@ -234,7 +292,11 @@ class App extends React.Component {
                             console.log("the path is: "+res);
                             CameraRoll.saveToCameraRoll(res)
                             .then(() => {
-                                console.log("img OK")
+                                console.log("img OK");
+                                Alert.alert(
+                                  'Image saved to Gallery'
+                                );
+
                             })
                             .catch((err) => {
                                 console.log("img error:", err)
@@ -247,46 +309,6 @@ class App extends React.Component {
                             })
                          })
 
-                        //const logo = '/storage/emulated/0/Download/anita-austvika-z_KamnExkgI-unsplash.jpg';
-                        const photo = this.state.photo
-
-                        // open a file called "lenna.png"
-                        //console.log("logo: "+logo);
-
-                        Jimp.read(imgProps.uri)
-                          .then(lenna => {
-                            //console.log(lenna);
-                            return lenna
-                              //.resize(256, 256) // resize
-                          })
-                          .catch(err => {
-                            console.error("something wrong ", err);
-                          });
-
-                           /*
-                          RNFS.readDir(RNFS.ExternalStorageDirectoryPath + '/Download') // On Android, use "RNFS.DocumentDirectoryPath" (MainBundlePath is not defined)
-                            .then((result) => {
-                              console.log('GOT RESULT', result);
-
-                              // stat the first file
-                              return Promise.all([RNFS.stat(result[0].path), result[0].path]);
-                            })
-                            .then((statResult) => {
-                              if (statResult[0].isFile()) {
-                                // if we have a file, read it
-                                return RNFS.readFile(statResult[1], 'utf8');
-                              }
-
-                              return 'no file';
-                            })
-                            .then((contents) => {
-                              // log the file contents
-                              console.log(contents);
-                            })
-                            .catch((err) => {
-                              console.log(err.message, err.code);
-                            });
-                            */
                         }
                       }
                     />
@@ -333,7 +355,7 @@ class App extends React.Component {
                      onPress={() =>
                          {
                              this.toggleModal();
-                             this.editImage(this.state.photos[this.state.index].node.image.uri);
+                             this.editImage(this.state.photos[this.state.index].node.image);
                            }
                          }
                    />
@@ -342,7 +364,9 @@ class App extends React.Component {
             }
           </View>
         </Modal>
+
       </View>
+       </ScrollView>
     )
   }
 }
@@ -353,13 +377,14 @@ styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'center',
     flexDirection: 'column',
-    paddingBottom: 10
+    paddingTop: 25
   },
   buttonContainer: {
       alignItems: 'center',
       flexDirection: 'row',
       justifyContent: 'space-between',
-      width: width * 0.7
+      width: width * 0.7,
+      paddingTop:20
 
     },
   modalContainer: {
@@ -370,6 +395,10 @@ styles = StyleSheet.create({
     flexWrap: 'wrap',
     flexDirection: 'row'
   },
+  scrollView1: {
+      
+
+    },
   openButton: {
     position: 'absolute',
     width,
@@ -378,12 +407,11 @@ styles = StyleSheet.create({
     left: 0
   },
   logo: {
-        position: 'absolute',
-        width: width / 3,
-        height:100,
-        resizeMode: 'contain',
-        opacity: .5
-    }
+     //width: this.state.width / 3,
+     height:100,
+     resizeMode: 'contain',
+     opacity: 1
+  }
 })
 
 export default App;
